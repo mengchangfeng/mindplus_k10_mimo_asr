@@ -28,6 +28,7 @@
       ],
       "main": "main.ts",
       "files": [
+        "_images/featured.png",
         "_images/icon.svg",
         "_locales/zh-cn.json",
         "_menus/index.json"
