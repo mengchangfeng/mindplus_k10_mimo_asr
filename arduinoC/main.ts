@@ -4,6 +4,7 @@ namespace k10_mimo_asr {
     function addRuntime() {
         Generator.addInclude("k10_mimo_asr_wifi", "#include <WiFi.h>");
         Generator.addInclude("k10_mimo_asr_tls", "#include <WiFiClientSecure.h>");
+        Generator.addInclude("k10_mimo_asr_http", "#include <HTTPClient.h>");
         Generator.addInclude("k10_mimo_asr_json", "#include <ArduinoJson.h>");
         Generator.addInclude("k10_mimo_asr_wire", "#include <Wire.h>");
         Generator.addInclude("k10_mimo_asr_i2s", "#include \"driver/i2s.h\"");
@@ -14,6 +15,8 @@ namespace k10_mimo_asr {
         Generator.addObject("k10_mimo_asr_globals", "String", `_k10MimoAsrApiKey = "";
 String _k10MimoAsrModel = "mimo-v2.5-asr";
 String _k10MimoAsrApiUrl = "https://api.xiaomimimo.com/v1";
+String _k10MimoTtsModel = "mimo-v2.5-tts";
+String _k10MimoTtsVoice = "冰糖";
 const uint32_t _k10MimoAsrSampleRate = 16000;
 const uint16_t _k10MimoAsrBitsPerSample = 16;
 const uint16_t _k10MimoAsrChannels = 1;
@@ -168,6 +171,111 @@ bool _k10MimoAsrInited = false;`);
     yield();
   }
   return body;
+}`);
+
+        Generator.addObject("k10_mimo_tts_json_escape_fn", "String", `_k10MimoTtsJsonEscape(const String &text) {
+  String out;
+  out.reserve(text.length() + 16);
+  for (size_t i = 0; i < text.length(); i++) {
+    char c = text.charAt(i);
+    if (c == '"' || c == '\\\\') { out += '\\\\'; out += c; }
+    else if (c == '\\n') out += "\\\\n";
+    else if (c == '\\r') out += "\\\\r";
+    else if (c == '\\t') out += "\\\\t";
+    else out += c;
+  }
+  return out;
+}`);
+
+        Generator.addObject("k10_mimo_tts_play_fn", "bool", `_k10MimoTtsPlayWav(uint8_t *wav, size_t wavLen) {
+  if (!wav || wavLen < 44) return false;
+  uint32_t sampleRate = (uint32_t)wav[24] | ((uint32_t)wav[25] << 8) |
+                        ((uint32_t)wav[26] << 16) | ((uint32_t)wav[27] << 24);
+  uint16_t channels = (uint16_t)wav[22] | ((uint16_t)wav[23] << 8);
+  uint16_t bits = (uint16_t)wav[34] | ((uint16_t)wav[35] << 8);
+  if (sampleRate == 0 || channels != 1 || bits != 16) return false;
+
+  uint32_t oldRate = i2s_get_clk(I2S_NUM_0);
+  i2s_set_sample_rates(I2S_NUM_0, sampleRate);
+  bool played = false;
+  if (xSemaphoreTake(xI2SMutex, portMAX_DELAY) == pdTRUE) {
+    const size_t monoSamples = 512;
+    int16_t stereo[monoSamples * 2];
+    size_t pos = 44;
+    while (pos + 1 < wavLen) {
+      size_t samples = (wavLen - pos) / 2;
+      if (samples > monoSamples) samples = monoSamples;
+      for (size_t i = 0; i < samples; i++) {
+        int16_t sample = (int16_t)((uint16_t)wav[pos + i * 2] |
+                                   ((uint16_t)wav[pos + i * 2 + 1] << 8));
+        stereo[i * 2] = sample;
+        stereo[i * 2 + 1] = sample;
+      }
+      size_t written = 0;
+      i2s_write(I2S_NUM_0, stereo, samples * sizeof(int16_t) * 2, &written, portMAX_DELAY);
+      pos += samples * 2;
+      yield();
+    }
+    i2s_zero_dma_buffer(I2S_NUM_0);
+    xSemaphoreGive(xI2SMutex);
+    played = true;
+  }
+  i2s_set_sample_rates(I2S_NUM_0, oldRate);
+  return played;
+}`);
+
+        Generator.addObject("k10_mimo_tts_speak_fn", "String", `_k10MimoTtsSpeak(const String &text, const String &style) {
+  if (!_k10MimoAsrInited) return "未初始化";
+  if (text.length() == 0) return "文本为空";
+  if (text.length() > 1800) return "文本过长";
+
+  String instruction = style;
+  instruction.trim();
+
+  String body = "{\\"model\\":\\"" + _k10MimoTtsModel +
+                "\\",\\"messages\\":[{\\"role\\":\\"user\\",\\"content\\":\\"" +
+                _k10MimoTtsJsonEscape(instruction) +
+                "\\"},{\\"role\\":\\"assistant\\",\\"content\\":\\"" +
+                _k10MimoTtsJsonEscape(text) +
+                "\\"}],\\"audio\\":{\\"format\\":\\"wav\\",\\"voice\\":\\"" +
+                _k10MimoTtsJsonEscape(_k10MimoTtsVoice) + "\\"}}";
+
+  HTTPClient http;
+  WiFiClientSecure client;
+  client.setInsecure();
+  client.setTimeout(60000);
+  if (!http.begin(client, "https://api.xiaomimimo.com/v1/chat/completions")) return "HTTPS初始化失败";
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("api-key", _k10MimoAsrApiKey);
+  int code = http.POST(body);
+  String response = http.getString();
+  http.end();
+  body = "";
+
+  if (code != 200) {
+    response = response.substring(0, 120);
+    return "HTTP " + String(code) + (response.length() ? ": " + response : "");
+  }
+
+  int mark = response.lastIndexOf("\\"data\\":\\"");
+  if (mark < 0) { response = ""; return "未找到音频数据"; }
+  int begin = mark + 8;
+  int end = response.indexOf('\\"', begin);
+  if (end <= begin) { response = ""; return "音频数据格式错误"; }
+
+  const char *encoded = response.c_str() + begin;
+  size_t encodedLen = (size_t)(end - begin);
+  size_t decodedCap = (encodedLen / 4) * 3 + 4;
+  uint8_t *wav = (uint8_t *)ps_malloc(decodedCap);
+  if (!wav) { response = ""; return "音频内存不足"; }
+  size_t wavLen = 0;
+  int ret = mbedtls_base64_decode(wav, decodedCap, &wavLen,
+                                  (const unsigned char *)encoded, encodedLen);
+  response = "";
+  if (ret != 0) { free(wav); return "音频Base64解码失败"; }
+  bool ok = _k10MimoTtsPlayWav(wav, wavLen);
+  free(wav);
+  return ok ? "" : "音频播放失败";
 }`);
 
         Generator.addObject("k10_mimo_asr_es7243_write_fn", "void", `_k10MimoAsrEs7243Write(uint8_t reg, uint8_t val) {
@@ -400,14 +508,16 @@ bool _k10MimoAsrInited = false;`);
   return lastError;
 }`);
 
-        Generator.addObject("k10_mimo_asr_begin_fn", "void", `_k10MimoAsrBegin(String apiUrl, String apiKey, String model, int maxSeconds) {
+        Generator.addObject("k10_mimo_asr_begin_fn", "void", `_k10MimoAsrBegin(String apiKey, String voice) {
   Wire.begin(48, 47);
   _k10MimoAsrInitES7243E();
 
-  _k10MimoAsrApiUrl = apiUrl;
   _k10MimoAsrApiKey = apiKey;
-  _k10MimoAsrModel = model;
-  _k10MimoAsrMaxSeconds = constrain(maxSeconds, 1, 8);
+  _k10MimoAsrModel = "mimo-v2.5-asr";
+  _k10MimoTtsModel = "mimo-v2.5-tts";
+  _k10MimoTtsVoice = voice;
+  if (_k10MimoTtsVoice.length() == 0) _k10MimoTtsVoice = "冰糖";
+  _k10MimoAsrMaxSeconds = 5;
 
   _k10MimoAsrInited = true;
 }`);
@@ -484,18 +594,14 @@ bool _k10MimoAsrInited = false;`);
 }`);
     }
 
-    //% block="初始化MiMo语音识别 API地址[API_URL] API密钥[API_KEY] 模型[MODEL] 最长录音秒数[MAX_SECONDS]" blockType="command"
-    //% API_URL.shadow="string" API_URL.defl="https://api.xiaomimimo.com/v1"
+    //% block="初始化MiMo API密钥[API_KEY] 音色[VOICE]" blockType="command"
     //% API_KEY.shadow="string" API_KEY.defl="api_key"
-    //% MODEL.shadow="string" MODEL.defl="mimo-v2.5-asr"
-    //% MAX_SECONDS.shadow="number" MAX_SECONDS.defl=5
+    //% VOICE.shadow="string" VOICE.defl="冰糖"
     export function init(parameter: any, block: any) {
         addRuntime();
-        const apiUrl = parameter.API_URL.code;
         const apiKey = parameter.API_KEY.code;
-        const model = parameter.MODEL.code;
-        const maxSeconds = parameter.MAX_SECONDS.code;
-        Generator.addCode(`_k10MimoAsrBegin(${apiUrl}, ${apiKey}, ${model}, ${maxSeconds});`);
+        const voice = parameter.VOICE.code;
+        Generator.addCode(`_k10MimoAsrBegin(${apiKey}, ${voice});`);
     }
 
     //% block="开始录音" blockType="command"
@@ -508,5 +614,16 @@ bool _k10MimoAsrInited = false;`);
     export function stopAndRecognize(parameter: any, block: any) {
         addRuntime();
         Generator.addCode(`_k10MimoAsrStopAndRecognize()`);
+    }
+
+    //% block="MiMo合成语音 文本[TEXT] 风格[STYLE]" blockType="command"
+    //% TEXT.shadow="string" TEXT.defl="你好，这是语音合成。"
+    // Mind+ 对空字符串 shadow 会自动填入 hello；用单空格显示为空，运行时会 trim 成空风格。
+    //% STYLE.shadow="string" STYLE.defl=" "
+    export function synthesize(parameter: any, block: any) {
+        addRuntime();
+        const text = parameter.TEXT.code;
+        const style = parameter.STYLE.code;
+        Generator.addCode(`_k10MimoTtsSpeak(${text}, ${style});`);
     }
 }

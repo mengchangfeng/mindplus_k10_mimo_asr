@@ -1,11 +1,11 @@
 {
   "name": {
-    "zh-cn": "K10 MiMo语音识别",
-    "en": "K10 MiMo ASR"
+    "zh-cn": "K10 MiMo语音识别与合成",
+    "en": "K10 MiMo ASR and TTS"
   },
   "description": {
-    "zh-cn": "行空板K10录音并调用MiMo-V2.5-ASR进行语音识别。",
-    "en": "Record audio on UNIHIKER K10 and recognize speech with MiMo-V2.5-ASR."
+    "zh-cn": "行空板K10调用MiMo进行语音识别和非流式语音合成。",
+    "en": "Use MiMo on UNIHIKER K10 for speech recognition and non-streaming speech synthesis."
   },
   "author": "mengchangfeng",
   "email": "1400720874@qq.com",
@@ -18,11 +18,11 @@
     "web",
     "linux"
   ],
-  "version": "0.0.4",
+  "version": "0.0.5",
   "asset": {
     "arduinoC": {
       "dir": "arduinoC/",
-      "version": "0.0.4",
+      "version": "0.0.5",
       "board": [
         "esp32s3bit"
       ],
