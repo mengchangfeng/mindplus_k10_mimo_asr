@@ -5,7 +5,6 @@ namespace k10_mimo_asr {
         Generator.addInclude("k10_mimo_asr_wifi", "#include <WiFi.h>");
         Generator.addInclude("k10_mimo_asr_tls", "#include <WiFiClientSecure.h>");
         Generator.addInclude("k10_mimo_asr_http", "#include <HTTPClient.h>");
-        Generator.addInclude("k10_mimo_asr_json", "#include <ArduinoJson.h>");
         Generator.addInclude("k10_mimo_asr_wire", "#include <Wire.h>");
         Generator.addInclude("k10_mimo_asr_i2s", "#include \"driver/i2s.h\"");
         Generator.addInclude("k10_mimo_asr_base64", "#include \"mbedtls/base64.h\"");
@@ -88,13 +87,41 @@ bool _k10MimoAsrInited = false;`);
 }`);
 
         Generator.addObject("k10_mimo_asr_parse_fn", "String", `_k10MimoAsrParseText(String response) {
-  DynamicJsonBuffer jsonBuffer;
-  JsonObject& root = jsonBuffer.parseObject(response);
-  if (!root.success()) return "";
+  int key = response.indexOf("\\"content\\"");
+  if (key < 0) return "";
 
-  const char *text = root["choices"][0]["message"]["content"];
-  if (text == NULL) return "";
-  return String(text);
+  int colon = response.indexOf(':', key);
+  if (colon < 0) return "";
+  int first = response.indexOf('"', colon + 1);
+  if (first < 0) return "";
+
+  String text;
+  text.reserve(64);
+  for (int pos = first + 1; pos < response.length(); pos++) {
+    char c = response.charAt(pos);
+    if (c == '"') return text;
+    if (c != '\\\\') {
+      text += c;
+      continue;
+    }
+
+    pos++;
+    if (pos >= response.length()) return "";
+    char escaped = response.charAt(pos);
+    if (escaped == 'n') text += '\\n';
+    else if (escaped == 'r') text += '\\r';
+    else if (escaped == 't') text += '\\t';
+    else if (escaped == 'b') text += '\\b';
+    else if (escaped == 'f') text += '\\f';
+    else if (escaped == '"') text += '"';
+    else if (escaped == '\\\\') text += '\\\\';
+    else if (escaped == '/') text += '/';
+    else {
+      text += '\\\\';
+      text += escaped;
+    }
+  }
+  return "";
 }`);
 
         Generator.addObject("k10_mimo_asr_write_client_fn", "template <typename ClientType>\nbool", `_k10MimoAsrWriteAll(ClientType &client, const char *data, size_t len) {
