@@ -18,11 +18,11 @@
     "web",
     "linux"
   ],
-  "version": "0.0.7",
+  "version": "0.0.8",
   "asset": {
     "arduinoC": {
       "dir": "arduinoC/",
-      "version": "0.0.7",
+      "version": "0.0.8",
       "board": [
         "esp32s3bit"
       ],

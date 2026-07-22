@@ -7,8 +7,6 @@ namespace k10_mimo_asr {
         Generator.addInclude("include_Wire_h", "#include <Wire.h>");
         Generator.addInclude("include_driver_i2s_h", "#include \"driver/i2s.h\"");
         Generator.addInclude("include_mbedtls_base64_h", "#include \"mbedtls/base64.h\"");
-        Generator.addInclude("include_unihiker_k10_h", "#include \"unihiker_k10.h\"");
-
         Generator.addObject("k10_mimo_asr_mutex", "extern SemaphoreHandle_t", "xI2SMutex;");
         Generator.addObject("k10_mimo_asr_globals", "String", `_k10MimoAsrApiKey = "";
 String _k10MimoAsrModel = "mimo-v2.5-asr";
