@@ -2,13 +2,12 @@
 namespace k10_mimo_asr {
 
     function addRuntime() {
-        Generator.addInclude("k10_mimo_asr_wifi", "#include <WiFi.h>");
-        Generator.addInclude("k10_mimo_asr_tls", "#include <WiFiClientSecure.h>");
-        Generator.addInclude("k10_mimo_asr_http", "#include <HTTPClient.h>");
-        Generator.addInclude("k10_mimo_asr_wire", "#include <Wire.h>");
-        Generator.addInclude("k10_mimo_asr_i2s", "#include \"driver/i2s.h\"");
-        Generator.addInclude("k10_mimo_asr_base64", "#include \"mbedtls/base64.h\"");
-        Generator.addInclude("k10_mimo_asr_k10", "#include \"unihiker_k10.h\"");
+        Generator.addInclude("include_WiFiClientSecure_h", "#include <WiFiClientSecure.h>");
+        Generator.addInclude("include_HTTPClient_h", "#include <HTTPClient.h>");
+        Generator.addInclude("include_Wire_h", "#include <Wire.h>");
+        Generator.addInclude("include_driver_i2s_h", "#include \"driver/i2s.h\"");
+        Generator.addInclude("include_mbedtls_base64_h", "#include \"mbedtls/base64.h\"");
+        Generator.addInclude("include_unihiker_k10_h", "#include \"unihiker_k10.h\"");
 
         Generator.addObject("k10_mimo_asr_mutex", "extern SemaphoreHandle_t", "xI2SMutex;");
         Generator.addObject("k10_mimo_asr_globals", "String", `_k10MimoAsrApiKey = "";
