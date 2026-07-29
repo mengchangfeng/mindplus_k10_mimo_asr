@@ -18,11 +18,11 @@
     "web",
     "linux"
   ],
-  "version": "0.0.8",
+  "version": "0.0.9",
   "asset": {
     "arduinoC": {
       "dir": "arduinoC/",
-      "version": "0.0.8",
+      "version": "0.0.9",
       "board": [
         "esp32s3bit"
       ],
@@ -31,7 +31,8 @@
         "_images/featured.png",
         "_images/icon.svg",
         "_locales/zh-cn.json",
-        "_menus/index.json"
+        "_menus/index.json",
+        "libraries/libraries.zip"
       ]
     }
   }
